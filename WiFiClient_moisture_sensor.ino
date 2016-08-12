@@ -5,6 +5,7 @@
 
 #include <ESP8266WiFi.h>
 #include <ESP8266WiFiMulti.h>
+#include "settings.h"
 
 ESP8266WiFiMulti WiFiMulti;
 int led_state = 0;
@@ -15,7 +16,7 @@ void setup() {
 
   // Connect to WiFi network
   //WiFiMulti.addAP("Goyoo", "f39ac7e2d0");  //work
-  WiFiMulti.addAP("601_2.4G", "88888889");   //home
+  WiFiMulti.addAP(WIFI_SSID, WIFI_PSWD);   //home
 
    // set LEDs
   pinMode(0, OUTPUT); //green1
@@ -44,8 +45,8 @@ void setup() {
 
 
 void loop() {
-  const uint16_t port = 6127;
-  const char * host = "192.168.1.142"; // ip or dns
+  const uint16_t port = HOST_PORT;
+  const char *host = HOST_IP; // ip or dns
   int sensorValue = analogRead(A0);
   
   // Print log to serial
