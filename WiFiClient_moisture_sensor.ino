@@ -79,7 +79,7 @@ void loop() {
   }
 
   // Send LED heartbeat request to the server
-  led_state = ÂheartBeat(led_state);
+  led_state = heartBeat(led_state);
 
   
   // POST moisture value to server
