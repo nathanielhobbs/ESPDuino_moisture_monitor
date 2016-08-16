@@ -19,7 +19,8 @@
 ESP8266WiFiMulti WiFiMulti;
 WiFiClient client; // Use WiFiClient class to create TCP connections
 int led_state = 0;
-const int SENSOR_MAX = 1023;
+int pump_iterations = 0;
+const int SENSOR_MAX = 1024;
 
 void setup() {
   Serial.begin(115200);  //connect to serial at 115200 bits/sec (baud=signal changes/sec)
@@ -67,7 +68,7 @@ void loop() {
   Serial.println(sensor_value);
 
   handleLights(sensor_value);
-  handlePump(sensor_value);
+  pump_iterations = handlePump(sensor_value, pump_iterations);
   
   // try to establish tcp connection
   if (!client.connect(host, port)) {
@@ -78,7 +79,7 @@ void loop() {
   }
 
   // Send LED heartbeat request to the server
-  heartBeat(led_state);
+  led_state = ÂheartBeat(led_state);
 
   
   // POST moisture value to server
@@ -91,14 +92,23 @@ void loop() {
   delay(2000);
 }
 
-void handlePump(int sensor_value){
-  if(between(sensor_value, 800, SENSOR_MAX)){
+// if moisture sensor passes threshhold, turn on pump for 5 sec
+// allow a maximum of 3 times running pump above threshhold, otherwise
+// don't allow pump to run (in case e.g. sensor breaks and value always 1024)
+int handlePump(int sensor_value, int pump_iterations){
+  if(between(sensor_value, 800, SENSOR_MAX) && pump_iterations < 3){
     digitalWrite(RELAY, LOW); //Turns ON Relay
     Serial.println("Pump ON");
     delay(5000); //wait 5 seconds
     digitalWrite(RELAY, HIGH); //Turns OFF Relay
     Serial.println("Pump OFF");
+    return pump_iterations++;
   }
+  else if(sensor_value < 800){
+    return pump_iterations = 0;
+  }
+  else
+    return pump_iterations;
 }
 
 void handleLights(int sensor_value){
@@ -151,7 +161,7 @@ void handleLights(int sensor_value){
   }
 }
 
-void heartBeat(int led_state){
+int heartBeat(int led_state){
   client.println("POST /light HTTP/1.1");
   client.println("Content-Type: application/x-www-form-urlencoded");
   client.println("Content-Length: 7");
@@ -164,7 +174,7 @@ void heartBeat(int led_state){
     client.println("state=1"); 
     
     // set led state
-    led_state = 1;
+    return led_state = 1;
   }else{
     Serial.println("light off");
     digitalWrite(BLUE,LOW);
@@ -172,7 +182,7 @@ void heartBeat(int led_state){
     // send POST to server turning off light
     client.println("state=0");
     
-     led_state = 0;
+     return led_state = 0;
   }
 }
 
