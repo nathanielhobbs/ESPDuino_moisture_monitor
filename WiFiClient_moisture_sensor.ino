@@ -90,6 +90,8 @@ void loop() {
   
   Serial.println("wait 2 sec...");
   delay(2000);
+
+  
 }
 
 // if moisture sensor passes threshhold, turn on pump for 5 sec
@@ -116,17 +118,26 @@ void handleLights(int sensor_value){
   // before adding water: ??? | 1018..1024 | 960..970 | 958-9 |   1024   | 
 
   if(between(sensor_value, 800, SENSOR_MAX)){
-    digitalWrite(RED, HIGH); 
+    digitalWrite(GREEN1, HIGH);
+    digitalWrite(GREEN2, HIGH);
+    digitalWrite(GREEN3, HIGH);
+    digitalWrite(YELLOW, HIGH);
+    digitalWrite(RED, HIGH);
     
     Serial.println("level 5");
   }
   else if(between(sensor_value, 600, 800)){
+    digitalWrite(GREEN1, HIGH);
+    digitalWrite(GREEN2, HIGH);
+    digitalWrite(GREEN3, HIGH);
     digitalWrite(YELLOW, HIGH);
     digitalWrite(RED, LOW);
     
     Serial.println("level 4");
   }
   else if(between(sensor_value, 400, 600)){
+    digitalWrite(GREEN1, HIGH);
+    digitalWrite(GREEN2, HIGH);
     digitalWrite(GREEN3, HIGH);
     digitalWrite(YELLOW, LOW);
     digitalWrite(RED, LOW);
@@ -134,7 +145,8 @@ void handleLights(int sensor_value){
     Serial.println("level 3");
   }
   else if(between(sensor_value, 230, 400)){
-    digitalWrite(GREEN2, HIGH);
+    digitalWrite(GREEN1, HIGH);
+    digitalWrite(GREEN2, HIGH );
     digitalWrite(GREEN3, LOW);
     digitalWrite(YELLOW, LOW);
     digitalWrite(RED, LOW);
