@@ -34,7 +34,7 @@ void setup() {
   //WiFiMulti.addAP("Goyoo", "f39ac7e2d0");  //work
   WiFiMulti.addAP(WIFI_SSID, WIFI_PSWD);   //home
 
-   // set LEDs
+  // set LEDs
   pinMode(GREEN1, OUTPUT); //green1
   pinMode(GREEN2, OUTPUT); //green2
   pinMode(GREEN3, OUTPUT); //green3
@@ -48,9 +48,9 @@ void setup() {
   Serial.println();
   Serial.print("Wait for WiFi... ");
 
-  while(WiFiMulti.run() != WL_CONNECTED) {
-      Serial.print(".");
-      delay(500);
+  while (WiFiMulti.run() != WL_CONNECTED) {
+    Serial.print(".");
+    delay(500);
   }
 
   Serial.println("");
@@ -66,7 +66,7 @@ void loop() {
   const uint16_t port = HOST_PORT;
   const char *host = HOST_IP; // ip or dns
   int sensor_value = analogRead(A0);
-  
+
   // Print log to serial
   Serial.print("connecting to ");
   Serial.println(host);
@@ -75,17 +75,17 @@ void loop() {
 
   handleLights(sensor_value);
   pump_iterations = handlePump(sensor_value, pump_iterations);
-  
+
   // try to establish tcp connection
   if (!client.connect(host, port)) {
-      Serial.println("connection failed");
-      Serial.println("wait 5 sec...");
-      delay(5000);
-      // reset to moisture levels to default if no response from server in past 24 hours
-      if(connection_attempts++ > 17,280){ 
-        copyIntArray(moisture_levels, DEFAULT_MOISTURE_LEVELS, num_moisture_levels);
-      }
-      return;
+    Serial.println("connection failed");
+    Serial.println("wait 5 sec...");
+    delay(5000);
+    // reset to moisture levels to default if no response from server in past 24 hours
+    if (connection_attempts++ > 17, 280) {
+      copyIntArray(moisture_levels, DEFAULT_MOISTURE_LEVELS, num_moisture_levels);
+    }
+    return;
   }
 
   // connected successfully, so reset connection_attempt
@@ -99,18 +99,18 @@ void loop() {
 
   Serial.println("closing connection");
   client.stop();
-  
+
   Serial.println("wait 2 sec...");
   delay(2000);
 
-  
+
 }
 
 // if moisture sensor passes threshhold, turn on pump for 5 sec
 // allow a maximum of 3 times running pump above threshhold, otherwise
 // don't allow pump to run (in case e.g. sensor breaks and value always 1024)
-int handlePump(int sensor_value, int pump_iterations){
-  if(between(sensor_value, 800, SENSOR_MAX) && pump_iterations < 3){
+int handlePump(int sensor_value, int pump_iterations) {
+  if (between(sensor_value, 800, SENSOR_MAX) && pump_iterations < 3) {
     digitalWrite(RELAY, LOW); //Turns ON Relay
     Serial.println("Pump ON");
     delay(5000); //wait 5 seconds
@@ -118,118 +118,133 @@ int handlePump(int sensor_value, int pump_iterations){
     Serial.println("Pump OFF");
     return pump_iterations++;
   }
-  else if(sensor_value < 800){
+  else if (sensor_value < 800) {
     return pump_iterations = 0;
   }
   else
     return pump_iterations;
 }
 
-void handleLights(int sensor_value){
-  // after adding water: 330  | 600..700   | 530..550 |  680  | 375..590 | 
-  // before adding water: ??? | 1018..1024 | 960..970 | 958-9 |   1024   | 
+void handleLights(int sensor_value) {
+  // after adding water: 330  | 600..700   | 530..550 |  680  | 375..590 |
+  // before adding water: ??? | 1018..1024 | 960..970 | 958-9 |   1024   |
 
-  if(between(sensor_value, moisture_levels[4], SENSOR_MAX)){
+  if (between(sensor_value, moisture_levels[4], SENSOR_MAX)) {
     digitalWrite(GREEN1, HIGH);
     digitalWrite(GREEN2, HIGH);
     digitalWrite(GREEN3, HIGH);
     digitalWrite(YELLOW, HIGH);
     digitalWrite(RED, HIGH);
-    
+
     Serial.println("level 5");
   }
-  else if(between(sensor_value, moisture_levels[3], moisture_levels[4])){
+  else if (between(sensor_value, moisture_levels[3], moisture_levels[4])) {
     digitalWrite(GREEN1, HIGH);
     digitalWrite(GREEN2, HIGH);
     digitalWrite(GREEN3, HIGH);
     digitalWrite(YELLOW, HIGH);
     digitalWrite(RED, LOW);
-    
+
     Serial.println("level 4");
   }
-  else if(between(sensor_value, moisture_levels[2], moisture_levels[3])){
+  else if (between(sensor_value, moisture_levels[2], moisture_levels[3])) {
     digitalWrite(GREEN1, HIGH);
     digitalWrite(GREEN2, HIGH);
     digitalWrite(GREEN3, HIGH);
     digitalWrite(YELLOW, LOW);
     digitalWrite(RED, LOW);
-    
+
     Serial.println("level 3");
   }
-  else if(between(sensor_value, moisture_levels[1], moisture_levels[2])){
+  else if (between(sensor_value, moisture_levels[1], moisture_levels[2])) {
     digitalWrite(GREEN1, HIGH);
     digitalWrite(GREEN2, HIGH );
     digitalWrite(GREEN3, LOW);
     digitalWrite(YELLOW, LOW);
     digitalWrite(RED, LOW);
-    
+
     Serial.println("level 2");
   }
-  else if(between(sensor_value, moisture_levels[0], moisture_levels[1])){
+  else if (between(sensor_value, moisture_levels[0], moisture_levels[1])) {
     digitalWrite(GREEN1, HIGH);
     digitalWrite(GREEN2, LOW);
     digitalWrite(GREEN3, LOW);
     digitalWrite(YELLOW, LOW);
     digitalWrite(RED, LOW);
-    
+
     Serial.println("level 1");
   }
-  else{
+  else {
     digitalWrite(GREEN1, LOW);
     digitalWrite(GREEN2, LOW);
     digitalWrite(GREEN3, LOW);
     digitalWrite(YELLOW, LOW);
     digitalWrite(RED, LOW);
-    
+
     Serial.println("level 0");
   }
 }
 
-int heartBeat(int led_state){
+int heartBeat(int led_state) {
   client.println("POST /heartbeat HTTP/1.1");
   client.println("Content-Type: application/x-www-form-urlencoded");
   client.println("Content-Length: 7");
   client.println("");//need empty line before body
-  if(led_state == 0){
+  if (led_state == 0) {
     Serial.println("light on");
     digitalWrite(BLUE, HIGH);
-    
+
     // send POST to server turning on light
-    client.println("state=1"); 
-    
+    client.println("state=1");
+
     // set led state
     return led_state = 1;
-  }else{
+  } else {
     Serial.println("light off");
-    digitalWrite(BLUE,LOW);
+    digitalWrite(BLUE, LOW);
 
     // send POST to server turning off light
     client.println("state=0");
-    
-     return led_state = 0;
+
+    return led_state = 0;
   }
 }
 
-void postSensorValue(int sensor_value){
+int countDigits(int number){
+  if(number > 0){
+    return floor (log10 (abs (number))) + 1;
+  }
+  return 0;
+}
+
+void postSensorValue(int sensor_value) {
+  int sensor_value_num_digits = countDigits(sensor_value);
+  char* plant_entry = "name=Pachira Aquatica (Money Tree 发财树)&moisture=";
+  int post_message_length = strlen(plant_entry) + sensor_value_num_digits;
+  char post_message[post_message_length];
+  sprintf(post_message, "%s%d", plant_entry, sensor_value);
+  Serial.println(post_message);
+  Serial.println(post_message_length);
+  
   client.println("POST /garden HTTP/1.1");
   client.println("Content-Type: application/x-www-form-urlencoded");
-  client.println("Content-Length: 20");  //16 chars and up to 4 digits
+  client.print("Content-Length: ");  //48 chars and up to 4 digits
+  client.println(post_message_length);
   client.println(""); //need empty line before body
-  client.print("name=Pachira&nbsp;Aquatica&nbsp;(Money&nbsp;Tree&nbsp;发财树)&moisture=");
-  client.println(sensor_value);
+  client.print(post_message);
 
   //read back one line from server
   String line = client.readStringUntil('\r');
   client.println(line);
 }
 
-boolean between(int value, int min, int max){
-  return value >= min && value <=max;
+boolean between(int value, int min, int max) {
+  return value >= min && value <= max;
 }
 
 // copy elements from arr2 into arr1
-void copyIntArray(int arr1[], int arr2[], int length){
-  for(int i=0; i<length; i++){
+void copyIntArray(int arr1[], int arr2[], int length) {
+  for (int i = 0; i < length; i++) {
     arr1[i] = arr2[i];
   }
 }
