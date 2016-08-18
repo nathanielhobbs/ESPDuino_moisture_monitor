@@ -174,7 +174,7 @@ void handleLights(int sensor_value){
 }
 
 int heartBeat(int led_state){
-  client.println("POST /light HTTP/1.1");
+  client.println("POST /heartbeat HTTP/1.1");
   client.println("Content-Type: application/x-www-form-urlencoded");
   client.println("Content-Length: 7");
   client.println("");//need empty line before body
@@ -199,7 +199,7 @@ int heartBeat(int led_state){
 }
 
 void postSensorValue(int sensor_value){
-  client.println("POST /plants HTTP/1.1");
+  client.println("POST /garden HTTP/1.1");
   client.println("Content-Type: application/x-www-form-urlencoded");
   client.println("Content-Length: 20");  //16 chars and up to 4 digits
   client.println(""); //need empty line before body
