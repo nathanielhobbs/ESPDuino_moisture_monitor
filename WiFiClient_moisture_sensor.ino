@@ -21,6 +21,10 @@ WiFiClient client; // Use WiFiClient class to create TCP connections
 int led_state = 0;
 int pump_iterations = 0;
 const int SENSOR_MAX = 1024;
+int DEFAULT_MOISTURE_LEVELS[] = {175, 230, 400, 600, 800};
+int moisture_levels[] = {175, 230, 400, 600, 800};
+int num_moisture_levels = 5;
+int connection_attempts = 0;
 
 void setup() {
   Serial.begin(115200);  //connect to serial at 115200 bits/sec (baud=signal changes/sec)
@@ -37,6 +41,8 @@ void setup() {
   pinMode(YELLOW, OUTPUT); //yellow
   pinMode(RED, OUTPUT); //red
   pinMode(BLUE, OUTPUT);//blue
+
+  copyIntArray(moisture_levels, DEFAULT_MOISTURE_LEVELS, num_moisture_levels);
 
   Serial.println();
   Serial.println();
@@ -75,13 +81,19 @@ void loop() {
       Serial.println("connection failed");
       Serial.println("wait 5 sec...");
       delay(5000);
+      // reset to moisture levels to default if no response from server in past 24 hours
+      if(connection_attempts++ > 17,280){ 
+        copyIntArray(moisture_levels, DEFAULT_MOISTURE_LEVELS, num_moisture_levels);
+      }
       return;
   }
+
+  // connected successfully, so reset connection_attempt
+  connection_attempts = 0;
 
   // Send LED heartbeat request to the server
   led_state = heartBeat(led_state);
 
-  
   // POST moisture value to server
   postSensorValue(sensor_value);
 
@@ -117,7 +129,7 @@ void handleLights(int sensor_value){
   // after adding water: 330  | 600..700   | 530..550 |  680  | 375..590 | 
   // before adding water: ??? | 1018..1024 | 960..970 | 958-9 |   1024   | 
 
-  if(between(sensor_value, 800, SENSOR_MAX)){
+  if(between(sensor_value, moisture_levels[4], SENSOR_MAX)){
     digitalWrite(GREEN1, HIGH);
     digitalWrite(GREEN2, HIGH);
     digitalWrite(GREEN3, HIGH);
@@ -126,7 +138,7 @@ void handleLights(int sensor_value){
     
     Serial.println("level 5");
   }
-  else if(between(sensor_value, 600, 800)){
+  else if(between(sensor_value, moisture_levels[3], moisture_levels[4])){
     digitalWrite(GREEN1, HIGH);
     digitalWrite(GREEN2, HIGH);
     digitalWrite(GREEN3, HIGH);
@@ -135,7 +147,7 @@ void handleLights(int sensor_value){
     
     Serial.println("level 4");
   }
-  else if(between(sensor_value, 400, 600)){
+  else if(between(sensor_value, moisture_levels[2], moisture_levels[3])){
     digitalWrite(GREEN1, HIGH);
     digitalWrite(GREEN2, HIGH);
     digitalWrite(GREEN3, HIGH);
@@ -144,7 +156,7 @@ void handleLights(int sensor_value){
     
     Serial.println("level 3");
   }
-  else if(between(sensor_value, 230, 400)){
+  else if(between(sensor_value, moisture_levels[1], moisture_levels[2])){
     digitalWrite(GREEN1, HIGH);
     digitalWrite(GREEN2, HIGH );
     digitalWrite(GREEN3, LOW);
@@ -153,7 +165,7 @@ void handleLights(int sensor_value){
     
     Serial.println("level 2");
   }
-  else if(between(sensor_value, 175, 230)){
+  else if(between(sensor_value, moisture_levels[0], moisture_levels[1])){
     digitalWrite(GREEN1, HIGH);
     digitalWrite(GREEN2, LOW);
     digitalWrite(GREEN3, LOW);
@@ -203,7 +215,7 @@ void postSensorValue(int sensor_value){
   client.println("Content-Type: application/x-www-form-urlencoded");
   client.println("Content-Length: 20");  //16 chars and up to 4 digits
   client.println(""); //need empty line before body
-  client.print("name=1&moisture=");
+  client.print("name=Pachira&nbsp;Aquatica&nbsp;(Money&nbsp;Tree&nbsp;发财树)&moisture=");
   client.println(sensor_value);
 
   //read back one line from server
@@ -213,5 +225,12 @@ void postSensorValue(int sensor_value){
 
 boolean between(int value, int min, int max){
   return value >= min && value <=max;
+}
+
+// copy elements from arr2 into arr1
+void copyIntArray(int arr1[], int arr2[], int length){
+  for(int i=0; i<length; i++){
+    arr1[i] = arr2[i];
+  }
 }
 
