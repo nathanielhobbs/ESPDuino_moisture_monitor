@@ -7,6 +7,10 @@
 #include <ESP8266WiFiMulti.h>
 #include "settings.h"
 
+// prep to store MAC address 
+uint8_t MAC_array[6];
+char MAC_char[18];
+
 //map digital pin numbers to words
 #define GREEN1 0
 #define GREEN2 2
@@ -18,30 +22,38 @@
 
 ESP8266WiFiMulti WiFiMulti;
 WiFiClient client; // Use WiFiClient class to create TCP connections
+char* plant_name = "Happiness Tree (幸福树)";
 int led_state = 0;
 int pump_iterations = 0;
 const int SENSOR_MAX = 1024;
-int DEFAULT_MOISTURE_LEVELS[] = {175, 230, 400, 600, 800};
-int moisture_levels[] = {175, 230, 400, 600, 800};
+int DEFAULT_MOISTURE_LEVELS[] = {300, 400, 500, 700, 900};
+int moisture_levels[] = {300, 400, 500, 700, 900};
 int num_moisture_levels = 5;
 int connection_attempts = 0;
+int iterations_since_post = 0;
 
 void setup() {
   Serial.begin(115200);  //connect to serial at 115200 bits/sec (baud=signal changes/sec)
-  delay(10);
+
+  // set MAC address
+  WiFi.macAddress(MAC_array);
+  for (int i = 0; i < sizeof(MAC_array); ++i){
+    sprintf(MAC_char,"%s%02x:",MAC_char,MAC_array[i]);
+  }
 
   // Connect to WiFi network
-  //WiFiMulti.addAP("Goyoo", "f39ac7e2d0");  //work
   WiFiMulti.addAP(WIFI_SSID, WIFI_PSWD);   //home
 
-  // set LEDs
+  // set digital pins for leds and pump
   pinMode(GREEN1, OUTPUT); //green1
   pinMode(GREEN2, OUTPUT); //green2
   pinMode(GREEN3, OUTPUT); //green3
   pinMode(YELLOW, OUTPUT); //yellow
   pinMode(RED, OUTPUT); //red
   pinMode(BLUE, OUTPUT);//blue
+  pinMode(RELAY, OUTPUT);
 
+  //set moisture levels to default values
   copyIntArray(moisture_levels, DEFAULT_MOISTURE_LEVELS, num_moisture_levels);
 
   Serial.println();
@@ -67,16 +79,19 @@ void loop() {
   const char *host = HOST_IP; // ip or dns
   int sensor_value = analogRead(A0);
 
-  // Print log to serial
+  // Print log 
   Serial.print("connecting to ");
   Serial.println(host);
   Serial.print("sensor reading: ");
   Serial.println(sensor_value);
 
-  handleLights(sensor_value);
-  pump_iterations = handlePump(sensor_value, pump_iterations);
+  handleSensorLights(sensor_value);
 
-  // try to establish tcp connection
+  Serial.println(pump_iterations);
+  pump_iterations = handlePump(sensor_value, pump_iterations);
+  Serial.println(pump_iterations);
+
+  // try to establish tcp connection to web server, if no connection then restart loop
   if (!client.connect(host, port)) {
     Serial.println("connection failed");
     Serial.println("wait 5 sec...");
@@ -89,43 +104,46 @@ void loop() {
   }
 
   // connected successfully, so reset connection_attempt
-  connection_attempts = 0;
+  connection_attempts = 0; //keeping track so can take actions when out of touch with server for too long
 
-  // Send LED heartbeat request to the server
+  // change led state to show successful server connection
   led_state = heartBeat(led_state);
 
-  // POST moisture value to server
-  postSensorValue(sensor_value);
+  // POST moisture value to server every 5 iterations
+  if(iterations_since_post++ > 5){
+    postSensorValue(sensor_value); 
+    iterations_since_post = 0;
+  }
 
   Serial.println("closing connection");
   client.stop();
 
   Serial.println("wait 2 sec...");
   delay(2000);
-
-
 }
 
 // if moisture sensor passes threshhold, turn on pump for 5 sec
 // allow a maximum of 3 times running pump above threshhold, otherwise
-// don't allow pump to run (in case e.g. sensor breaks and value always 1024)
+// don't allow pump to run (in case e.g. sensor breaks and value always above threshhold)
 int handlePump(int sensor_value, int pump_iterations) {
-  if (between(sensor_value, 800, SENSOR_MAX) && pump_iterations < 3) {
-    digitalWrite(RELAY, LOW); //Turns ON Relay
+  if (between(sensor_value, moisture_levels[4], SENSOR_MAX) && pump_iterations < 3) {
+    digitalWrite(RELAY, HIGH); //Turns ON Relay
     Serial.println("Pump ON");
-    delay(5000); //wait 5 seconds
-    digitalWrite(RELAY, HIGH); //Turns OFF Relay
+    Serial.println(pump_iterations);
+    delay(10000); //wait 10 seconds
+    digitalWrite(RELAY, LOW); //Turns OFF Relay
     Serial.println("Pump OFF");
-    return pump_iterations++;
+    return pump_iterations+1;
   }
-  else if (sensor_value < 800) {
+  //reset pump iterations if under between green and yellow
+  else if (sensor_value < (moisture_levels[2]+moisture_levels[3])/2) { 
     return pump_iterations = 0;
   }
   else
     return pump_iterations;
 }
 
-void handleLights(int sensor_value) {
+void handleSensorLights(int sensor_value) {
   // after adding water: 330  | 600..700   | 530..550 |  680  | 375..590 |
   // before adding water: ??? | 1018..1024 | 960..970 | 958-9 |   1024   |
 
@@ -186,26 +204,13 @@ void handleLights(int sensor_value) {
 }
 
 int heartBeat(int led_state) {
-  client.println("POST /heartbeat HTTP/1.1");
-  client.println("Content-Type: application/x-www-form-urlencoded");
-  client.println("Content-Length: 7");
-  client.println("");//need empty line before body
   if (led_state == 0) {
-    Serial.println("light on");
+    Serial.println("heartbeat light on");
     digitalWrite(BLUE, HIGH);
-
-    // send POST to server turning on light
-    client.println("state=1");
-
-    // set led state
     return led_state = 1;
   } else {
-    Serial.println("light off");
+    Serial.println("heartbeat light off");
     digitalWrite(BLUE, LOW);
-
-    // send POST to server turning off light
-    client.println("state=0");
-
     return led_state = 0;
   }
 }
@@ -219,16 +224,17 @@ int countDigits(int number){
 
 void postSensorValue(int sensor_value) {
   int sensor_value_num_digits = countDigits(sensor_value);
-  char* plant_entry = "name=Pachira Aquatica (Money Tree 发财树)&moisture=";
-  int post_message_length = strlen(plant_entry) + sensor_value_num_digits;
-  char post_message[post_message_length];
-  sprintf(post_message, "%s%d", plant_entry, sensor_value);
-  Serial.println(post_message);
+  int post_message_length = strlen("mac=&moisture=") + strlen(MAC_char) + sensor_value_num_digits;
+  Serial.print("number of bytes to post update is: ");
   Serial.println(post_message_length);
+  char post_message[post_message_length];
+  sprintf(post_message, "mac=%s&moisture=%d", MAC_char, sensor_value);
+  Serial.print("Sending POST: ");
+  Serial.println(post_message);
   
   client.println("POST /garden HTTP/1.1");
   client.println("Content-Type: application/x-www-form-urlencoded");
-  client.print("Content-Length: ");  //48 chars and up to 4 digits
+  client.print("Content-Length: ");  
   client.println(post_message_length);
   client.println(""); //need empty line before body
   client.print(post_message);
