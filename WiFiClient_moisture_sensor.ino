@@ -4,7 +4,8 @@
  */
 
 #include <ESP8266WiFi.h>
-#include <ESP8266WiFiMulti.h>
+#include <ESP8266WiFiMulti.h>   //for connection to wifi
+#include <ESP8266HTTPClient.h>  //for sending HTTP requests
 #include "settings.h"
 
 // prep to store MAC address 
@@ -32,6 +33,13 @@ int num_moisture_levels = 5;
 int connection_attempts = 0;
 int iterations_since_post = 0;
 
+// copy elements from arr2 into arr1
+void copyIntArray(int arr1[], int arr2[], int length) {
+  for (int i = 0; i < length; i++) {
+    arr1[i] = arr2[i];
+  }
+}
+
 void setup() {
   Serial.begin(115200);  //connect to serial at 115200 bits/sec (baud=signal changes/sec)
 
@@ -40,9 +48,6 @@ void setup() {
   for (int i = 0; i < sizeof(MAC_array); ++i){
     sprintf(MAC_char,"%s%02x:",MAC_char,MAC_array[i]);
   }
-
-  // Connect to WiFi network
-  WiFiMulti.addAP(WIFI_SSID, WIFI_PSWD);   //home
 
   // set digital pins for leds and pump
   pinMode(GREEN1, OUTPUT); //green1
@@ -56,6 +61,10 @@ void setup() {
   //set moisture levels to default values
   copyIntArray(moisture_levels, DEFAULT_MOISTURE_LEVELS, num_moisture_levels);
 
+
+  // Connect to WiFi network
+  WiFiMulti.addAP(WIFI_SSID, WIFI_PSWD);  
+   
   Serial.println();
   Serial.println();
   Serial.print("Wait for WiFi... ");
@@ -73,53 +82,8 @@ void setup() {
   delay(500);
 }
 
-
-void loop() {
-  const uint16_t port = HOST_PORT;
-  const char *host = HOST_IP; // ip or dns
-  int sensor_value = analogRead(A0);
-
-  // Print log 
-  Serial.print("connecting to ");
-  Serial.println(host);
-  Serial.print("sensor reading: ");
-  Serial.println(sensor_value);
-
-  handleSensorLights(sensor_value);
-
-  Serial.println(pump_iterations);
-  pump_iterations = handlePump(sensor_value, pump_iterations);
-  Serial.println(pump_iterations);
-
-  // try to establish tcp connection to web server, if no connection then restart loop
-  if (!client.connect(host, port)) {
-    Serial.println("connection failed");
-    Serial.println("wait 5 sec...");
-    delay(5000);
-    // reset to moisture levels to default if no response from server in past 24 hours
-    if (connection_attempts++ > 17, 280) {
-      copyIntArray(moisture_levels, DEFAULT_MOISTURE_LEVELS, num_moisture_levels);
-    }
-    return;
-  }
-
-  // connected successfully, so reset connection_attempt
-  connection_attempts = 0; //keeping track so can take actions when out of touch with server for too long
-
-  // change led state to show successful server connection
-  led_state = heartBeat(led_state);
-
-  // POST moisture value to server every 5 iterations
-  if(iterations_since_post++ > 5){
-    postSensorValue(sensor_value); 
-    iterations_since_post = 0;
-  }
-
-  Serial.println("closing connection");
-  client.stop();
-
-  Serial.println("wait 2 sec...");
-  delay(2000);
+boolean between(int value, int min, int max) {
+  return value >= min && value <= max;
 }
 
 // if moisture sensor passes threshhold, turn on pump for 5 sec
@@ -222,36 +186,101 @@ int countDigits(int number){
   return 0;
 }
 
-void postSensorValue(int sensor_value) {
+void postSensorValue(char *host, uint16_t port, char *url, int sensor_value) {
+
+  HTTPClient http;
+
+  Serial.print("[HTTP] begin...\n");
+  http.begin(host, port, url);
+  http.addHeader("Content-Type", "application/x-www-form-urlencoded");
+
+  Serial.print("[HTTP] POST...\n");
   int sensor_value_num_digits = countDigits(sensor_value);
   int post_message_length = strlen("mac=&moisture=") + strlen(MAC_char) + sensor_value_num_digits;
   Serial.print("number of bytes to post update is: ");
   Serial.println(post_message_length);
   char post_message[post_message_length];
   sprintf(post_message, "mac=%s&moisture=%d", MAC_char, sensor_value);
-  Serial.print("Sending POST: ");
+//  Serial.print("Sending POST: ");
   Serial.println(post_message);
+  int httpCode = http.POST(post_message);
+//  http.writeToStream(&Serial);
+
+  // httpCode will be negative on error
+  if(httpCode > 0) {
+      // HTTP header has been send and Server response header has been handled
+      Serial.printf("[HTTP] POST... code: %d\n", httpCode);
+
+      // connected successfully, so  connection_attempt
+      connection_attempts = 0; //keeping track so can take actions when out of touch with server for too long
+
+      // file found at server
+      if(httpCode == HTTP_CODE_OK) {
+          String payload = http.getString();
+          Serial.println(payload);
+      }
+  } else {
+      Serial.printf("[HTTP] POST... failed, error: %s\n", http.errorToString(httpCode).c_str());
+  }
+
+  http.end();
+
   
-  client.println("POST /garden HTTP/1.1");
-  client.println("Content-Type: application/x-www-form-urlencoded");
-  client.print("Content-Length: ");  
-  client.println(post_message_length);
-  client.println(""); //need empty line before body
-  client.print(post_message);
-
-  //read back one line from server
-  String line = client.readStringUntil('\r');
-  client.println(line);
+//  int sensor_value_num_digits = countDigits(sensor_value);
+//  int post_message_length = strlen("mac=&moisture=") + strlen(MAC_char) + sensor_value_num_digits;
+//  Serial.print("number of bytes to post update is: ");
+//  Serial.println(post_message_length);
+//  char post_message[post_message_length];
+//  sprintf(post_message, "mac=%s&moisture=%d", MAC_char, sensor_value);
+//  Serial.print("Sending POST: ");
+//  Serial.println(post_message);
+//  
+//  client.println("POST /garden HTTP/1.1");
+//  client.println("Content-Type: application/x-www-form-urlencoded");
+//  client.print("Content-Length: ");  
+//  client.println(post_message_length);
+//  client.println(""); //need empty line before body
+//  client.print(post_message);
+//
+//  //read back one line from server
+//  String line = client.readStringUntil('\r');
+//  client.println(line);
 }
 
-boolean between(int value, int min, int max) {
-  return value >= min && value <= max;
-}
+void loop() {
+  int sensor_value = analogRead(A0);
 
-// copy elements from arr2 into arr1
-void copyIntArray(int arr1[], int arr2[], int length) {
-  for (int i = 0; i < length; i++) {
-    arr1[i] = arr2[i];
+  // Print sensor value
+  Serial.print("sensor reading: ");
+  Serial.println(sensor_value);
+
+  // Adjust LED lights according to sensor value
+  handleSensorLights(sensor_value);
+
+  // Turn on pump if necessary
+  Serial.println(pump_iterations);
+  pump_iterations = handlePump(sensor_value, pump_iterations);
+  Serial.println(pump_iterations);
+
+  //--------------- Send update to server ------------------
+  // format "http://host:port/url"
+  uint16_t port = HOST_PORT;
+  char *host = HOST_ADDRESS; // ip address or host name
+  char *url = HOST_URL;     // path
+  
+  Serial.printf("connecting to http%s://%s:%d%s => ", port==443?"s":"", host, port, url);
+
+
+  // wait for WiFi connection
+  if((WiFiMulti.run() == WL_CONNECTED)) {
+    // change led state to show successful wifi connection
+    led_state = heartBeat(led_state);
+
+    // POST moisture value to server every 5 iterations
+    if(iterations_since_post++ > 5){
+      postSensorValue(host, port, url, sensor_value); 
+      iterations_since_post = 0;
+    }
   }
 }
 
