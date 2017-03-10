@@ -193,25 +193,18 @@ void postSensorValue(char *host, uint16_t port, char *url, int sensor_value) {
   Serial.print("[HTTP] begin...\n");
   http.begin(host, port, url);
   http.addHeader("Content-Type", "application/x-www-form-urlencoded");
-
+  String post_contents =  String("mac=" + String(MAC_char) + "&moisture=" + String(sensor_value));  
   Serial.print("[HTTP] POST...\n");
-  int sensor_value_num_digits = countDigits(sensor_value);
-  int post_message_length = strlen("mac=&moisture=") + strlen(MAC_char) + sensor_value_num_digits;
-  Serial.print("number of bytes to post update is: ");
-  Serial.println(post_message_length);
-  char post_message[post_message_length];
-  sprintf(post_message, "mac=%s&moisture=%d", MAC_char, sensor_value);
-//  Serial.print("Sending POST: ");
-  Serial.println(post_message);
-  int httpCode = http.POST(post_message);
+  int httpCode = http.POST(post_contents);
 //  http.writeToStream(&Serial);
+  http.end();
 
   // httpCode will be negative on error
   if(httpCode > 0) {
       // HTTP header has been send and Server response header has been handled
       Serial.printf("[HTTP] POST... code: %d\n", httpCode);
 
-      // connected successfully, so  connection_attempt
+      // connected successfully, so reset connection_attempts
       connection_attempts = 0; //keeping track so can take actions when out of touch with server for too long
 
       // file found at server
@@ -223,29 +216,21 @@ void postSensorValue(char *host, uint16_t port, char *url, int sensor_value) {
       Serial.printf("[HTTP] POST... failed, error: %s\n", http.errorToString(httpCode).c_str());
   }
 
-  http.end();
+//  http.end();
 
-  
-//  int sensor_value_num_digits = countDigits(sensor_value);
-//  int post_message_length = strlen("mac=&moisture=") + strlen(MAC_char) + sensor_value_num_digits;
-//  Serial.print("number of bytes to post update is: ");
-//  Serial.println(post_message_length);
-//  char post_message[post_message_length];
-//  sprintf(post_message, "mac=%s&moisture=%d", MAC_char, sensor_value);
-//  Serial.print("Sending POST: ");
-//  Serial.println(post_message);
-//  
-//  client.println("POST /garden HTTP/1.1");
-//  client.println("Content-Type: application/x-www-form-urlencoded");
-//  client.print("Content-Length: ");  
-//  client.println(post_message_length);
-//  client.println(""); //need empty line before body
-//  client.print(post_message);
-//
-//  //read back one line from server
-//  String line = client.readStringUntil('\r');
-//  client.println(line);
 }
+
+void postToQoncrete(String host, uint16_t port, String url, int sensor_value) {
+  HTTPClient http;
+  
+  http.begin(host, port, url, port==443?true:false, String("C6:C2:A4:61:E9:4E:02:DF:DA:D3:18:7B:B8:34:0F:71:9C:41:76:2B"));
+  http.addHeader("Content-Type", "application/json");
+  Serial.print("[HTTP] POST to Qoncrete...\n");
+  String json = String("{\"mac\":\"" + String(MAC_char) + "\", \"moistureReading\":" + sensor_value + "}");
+  int httpCode = http.POST(json);
+  http.writeToStream(&Serial);  
+  http.end();
+ }
 
 void loop() {
   int sensor_value = analogRead(A0);
@@ -265,7 +250,7 @@ void loop() {
   //--------------- Send update to server ------------------
   // format "http://host:port/url"
   uint16_t port = HOST_PORT;
-  char *host = HOST_ADDRESS; // ip address or host name
+  char *host = HOST_IP; // ip address or host name
   char *url = HOST_URL;     // path
   
   Serial.printf("connecting to http%s://%s:%d%s => ", port==443?"s":"", host, port, url);
@@ -279,6 +264,11 @@ void loop() {
     // POST moisture value to server every 5 iterations
     if(iterations_since_post++ > 5){
       postSensorValue(host, port, url, sensor_value); 
+
+      uint16_t q_port = QONCRETE_HOST_PORT;
+      String q_host = QONCRETE_HOST_ADDRESS; // ip address or host name
+      String q_url = QONCRETE_HOST_URL;     // path
+      postToQoncrete(q_host, q_port, q_url, sensor_value);
       iterations_since_post = 0;
     }
   }
